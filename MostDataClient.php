@@ -1,9 +1,13 @@
 <?php
 /**
- * Created by PhpStorm.
- * User: Kyriakos
- * Date: 18/2/2015
- * Time: 1:46 μμ
+ * MOST Web Framework
+ * A JavaScript Web Framework
+ * http://themost.io
+ *
+ * Copyright (c) 2015, Kyriakos Barbounakis k.barbounakis@gmail.com, Anthi Oikonomou anthioikonomou@gmail.com
+ *
+ * Released under the BSD3-Clause license
+ * Date: 2015-02-19
  */
 require_once 'HTTP/Request2.php';
 
