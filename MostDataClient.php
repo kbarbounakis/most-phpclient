@@ -345,12 +345,32 @@ class ClientDataQueryable
      */
     protected $options;
     /**
+     * Gets or sets the target URL based on the current model
+     * @var *
+     */
+    protected $get_url;
+    /**
+     * Gets or sets the target URL for POST operations based on the current model
+     * @var *
+     */
+    protected $post_url;
+    /**
+     * Gets or sets the key of the related item if any
+     * @var *
+     */
+    private $key;
+    /**
      * ClientDataQueryable class constructor.
      * @param string $model - A string that represents the target model for this object.
      */
-    public function __construct($model = null) {
+    public function __construct($model) {
         //set model
         $this->model = $model;
+        //set get url
+        $this->get_url = "/$model/index.json";
+        //set post url
+        $this->post_url = "/$model/edit.json";
+        //init options
         $this->options = new DataQueryableOptions();
     }
 
@@ -369,7 +389,36 @@ class ClientDataQueryable
                 $this->top($num);
         //get data
         $model = $this->model;
-        return $this->service->get("/$model/index.json".$this->build_options_query());
+        return $this->service->get($this->get_url.$this->build_options_query());
+    }
+
+    /**
+     * @param * $key
+     * @return ClientDataQueryable
+     */
+    public function item($key) {
+        $this->key = $key;
+        return $this;
+    }
+
+    /**
+     * @param string $association
+     * @return ClientDataQueryable
+     * @throws Exception
+     */
+    public function query($association) {
+        if (is_null($this->key))
+            throw new Exception('Associated item cannot be empty at this context.');
+        $q = new ClientDataQueryable($association);
+        //clone service
+        $q->service = $this->service;
+        //get variables
+        $key = $this->key; $model = $this->model;
+        //set get url
+        $q->get_url = "/$model/$key/$association/index.json";
+        //set post url
+        $q->post_url = "/$model/$key/$association/edit.json";
+        return $q;
     }
 
     /**
@@ -381,7 +430,7 @@ class ClientDataQueryable
         $this->skip(0)->top(1);
         //get data
         $model = $this->model;
-        return $this->service->get("/$model/index.json".$this->build_options_query())[0];
+        return $this->service->get($this->get_url.$this->build_options_query())[0];
     }
 
     /**
@@ -393,7 +442,7 @@ class ClientDataQueryable
      */
     public function update($data) {
         $model = $this->model;
-        return $this->service->post("/$model/edit.json", $data);
+        return $this->service->post($this->post_url, $data);
     }
 
     /**
@@ -405,7 +454,7 @@ class ClientDataQueryable
      */
     public function insert($data) {
         $model = $this->model;
-        return $this->service->put("/$model/edit.json", $data);
+        return $this->service->put($this->post_url, $data);
     }
 
     /**
@@ -417,7 +466,7 @@ class ClientDataQueryable
      */
     public function remove($data) {
         $model = $this->model;
-        return $this->service->remove("/$model/edit.json", $data);
+        return $this->service->remove($this->post_url, $data);
     }
 
     private function build_options_query() {
