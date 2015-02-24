@@ -372,6 +372,8 @@ class ClientDataQueryable
         $this->post_url = "/$model/edit.json";
         //init options
         $this->options = new DataQueryableOptions();
+        //set inline count to true
+        $this->options->inlinecount=true;
     }
 
     const EXCEPTION_INVALID_RIGHT_OP = 'Invalid right operand assignment. Left operand cannot be empty at this context.';

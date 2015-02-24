@@ -11,9 +11,9 @@
     }
   ],
   "require": {
-    "pear/http_request2": "dev-trunk",
-    "phpunit/phpunit": "4.7.x-dev"
+    "pear/http_request2": "dev-trunk"
   },
   "require-dev": {
+    "phpunit/phpunit": "4.7.x-dev"
   }
 }
