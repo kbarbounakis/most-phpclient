@@ -344,6 +344,34 @@ class DataQueryableOptions
 }
 
 /**
+ * A FilterExpression instance that is going to be used in open data filter statements
+ * Class FilterExpression
+ */
+class FilterExpression {
+
+    public $expr;
+    /**
+     * @param string $expr
+     */
+    public function __construct($expr) {
+        $this->expr = $expr;
+    }
+    public function __toString(){
+        return $this->expr;
+    }
+}
+
+/**
+ * Represents a common HTTP exception
+ * Class HttpClientException
+ */
+class MeExpression extends FilterExpression {
+    public function __construct() {
+        parent::__construct('me()');
+    }
+}
+
+/**
  * Class ClientDataQueryable
  */
 class ClientDataQueryable
@@ -1052,8 +1080,13 @@ class ClientDataQueryable
         else if (is_string($value)) {
             return "'$value'";
         }
+        //6. filter expression
+        else if (is_a($value, 'FilterExpression')) {
+            return (string)$value;
+        }
+        //7. other
         else {
-            $str = var_dump($value);
+            $str = (string)$value;
             return "'$str'";
         }
     }
