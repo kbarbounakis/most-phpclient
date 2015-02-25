@@ -296,14 +296,51 @@ class ClientDataContext {
 
 class DataQueryableOptions
 {
+    /**
+     * Gets or set a string that contains an open data formatted filter statement, if any.
+     * @var
+     */
     public $filter;
+    /**
+     * Gets or sets a comma delimited string that contains the fields to be retrieved.
+     * @var
+     */
     public $select;
+    /**
+     * Gets or sets a comma delimited string that contains the fields to be used for ordering the result set.
+     * @var
+     */
     public $order;
+    /**
+     * Gets or sets a number that indicates the number of records to retrieve.
+     * @var
+     */
     public $top;
+    /**
+     * Gets or sets a number that indicates the number of records to be skipped.
+     * @var
+     */
     public $skip;
+    /**
+     * Gets or sets a comma delimited string that contains the fields to be used for grouping the result set.
+     * @var
+     */
     public $group;
+    /**
+     * Gets or sets a comma delimited string that contains the models to be expanded.
+     * @var
+     */
     public $expand;
+    /**
+     * Gets or sets a boolean that indicates whether paging parameters will be included in the result set.
+     * @var *
+     */
     public $inlinecount;
+    /**
+     *  Gets or set a string that contains an open data formatted filter statement that is going to be joined with the underlying filter statement, if any.
+     * @var *
+     */
+    public $prepared;
 }
 
 /**
@@ -324,22 +361,27 @@ class ClientDataQueryable
      * Gets or sets in-process operator
      * @var null|string
      */
-    protected $left;
+    private $left;
     /**
      * Gets or sets in-process operator
      * @var null|string
      */
-    protected $op;
+    private $op;
     /**
      * Gets or sets in-process operator
      * @var null|string
      */
-    protected $lop;
+    private $lop;
+    /**
+     * Gets or sets in-process prepared operator
+     * @var null|string
+     */
+    private $prepared_lop;
     /**
      * Gets or sets in-process operator
      * @var *
      */
-    protected $right;
+    private $right;
     /**
      * @var null|DataQueryableOptions
      */
@@ -471,11 +513,32 @@ class ClientDataQueryable
         return $this->service->remove($this->post_url, $data);
     }
 
+    private function join_filters($filter1=null, $filter2=null)
+    {
+        if (is_string($filter1)) {
+            if (is_null($this->prepared_lop))
+                $this->prepared_lop='and';
+            if (is_string($filter2)) {
+                return '('.$filter1.') '.$this->prepared_lop.' ('.$filter2.')';
+            }
+            else {
+                return $filter1;
+            }
+        }
+        else {
+            return $filter2;
+        }
+    }
+
     private function build_options_query() {
         if (is_null($this->options))
             return '';
         //enumerate options
         $vars = get_object_vars($this->options);
+        if (is_string($vars['prepared'])) {
+            $vars['filter'] = $this->join_filters($vars['prepared'], $vars['filter']);
+            $vars['prepared']=null;
+        }
         $query = array();
         while (list($key, $val) = each($vars)) {
             if (!is_null($val))
@@ -514,6 +577,45 @@ class ClientDataQueryable
      */
     public function paged() {
         $this->options->inlinecount = true;
+        return $this;
+    }
+
+    /**
+     * @return ClientDataQueryable
+     */
+    public function prepare() {
+        if (is_null($this->options->filter))
+          return $this;
+        //append filter statement
+        $this->options->prepared = $this->join_filters($this->options->prepared, $this->options->filter);
+        //destroy filter statement
+        $this->options->filter=null;
+        return $this;
+    }
+
+    /**
+     * @param string $field
+     * @return ClientDataQueryable
+     */
+    public function andAlso($field) {
+        if (is_null($field))
+            return $this;
+        $this->prepare();
+        $this->prepared_lop = 'and';
+        $this->left = $field;
+        return $this;
+    }
+
+    /**
+     * @param string $field
+     * @return ClientDataQueryable
+     */
+    public function orElse($field) {
+        if (is_null($field))
+            return $this;
+        $this->prepare();
+        $this->prepared_lop = 'or';
+        $this->left = $field;
         return $this;
     }
 
@@ -902,10 +1004,11 @@ class ClientDataQueryable
     protected function append() {
         try {
             $expr = $this->left . ' ' . $this->op . ' ' . $this->escape($this->right);
-            if (is_null($this->lop))
-            $this->lop = 'and';
+            if (is_null($this->lop)) {
+                $this->lop = 'and';
+            }
             if (isset($this->options->filter))
-                $this->options->filter = '(' . $this->options->filter . ') and (' . $expr . ')';
+                $this->options->filter = '(' . $this->options->filter . ') '. $this->lop .' (' . $expr . ')';
             else
                 $this->options->filter = $expr;
                     //clear expression parameters
