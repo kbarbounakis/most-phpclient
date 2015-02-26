@@ -569,8 +569,13 @@ class ClientDataQueryable
         }
         $query = array();
         while (list($key, $val) = each($vars)) {
-            if (!is_null($val))
-                array_push($query, '$'.$key.'='.$val);
+            if (!is_null($val)) {
+                if (is_bool($val))
+                    array_push($query, '$'.$key.'='.($val ? 'true' : 'false'));
+                else
+                    array_push($query, '$'.$key.'='.$val);
+            }
+
         }
         if (count($query)>0) {
             return "?".implode('&',$query);
