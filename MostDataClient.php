@@ -459,6 +459,9 @@ class ClientDataQueryable
         if (is_int($num))
             if ($num>=0)
                 $this->top($num);
+        if (!is_null($this->options->top))
+            if ($this->options->top<=0)
+                $this->options->inlinecount=false;
         //get data
         $model = $this->model;
         return $this->service->get($this->get_url.$this->build_options_query());
@@ -599,7 +602,7 @@ class ClientDataQueryable
      * @return ClientDataQueryable
      */
     public function top($num = 25) {
-        if ($num<=0)
+        if ($num<0)
             return $this;
         $this->options->top = $num;
         return $this;
@@ -706,6 +709,30 @@ class ClientDataQueryable
             }
             else {
                 $this->options->select = null;
+            }
+        }
+        else
+            throw new Exception('Invalid argument. Expected string or array.');
+        return $this;
+    }
+
+    /**
+     * @param null|string|array $field
+     * @return ClientDataQueryable
+     * @throws Exception
+     */
+    public function group_by($field = null) {
+        if(is_null($field))
+            return $this;
+        if (is_string($field)) {
+            $this->options->group = $field;
+        }
+        else if(is_array($field)) {
+            if (count($field)>0) {
+                $this->options->group = implode(',', $field);
+            }
+            else {
+                $this->options->group = null;
             }
         }
         else
