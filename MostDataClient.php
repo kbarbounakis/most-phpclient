@@ -625,7 +625,7 @@ class ClientDataQueryable
      * @param string $field
      * @return ClientDataQueryable
      */
-    public function andAlso($field) {
+    public function and_also($field) {
         if (is_null($field))
             return $this;
         $this->prepare();
@@ -638,7 +638,7 @@ class ClientDataQueryable
      * @param string $field
      * @return ClientDataQueryable
      */
-    public function orElse($field) {
+    public function or_else($field) {
         if (is_null($field))
             return $this;
         $this->prepare();
@@ -733,7 +733,7 @@ class ClientDataQueryable
      * @param null|string $field
      * @return ClientDataQueryable
      */
-    public function orderBy($field = null) {
+    public function order_by($field = null) {
         if(is_null($field))
             return $this;
         $this->options->order = $field;
@@ -743,7 +743,7 @@ class ClientDataQueryable
      * @param null|string $field
      * @return ClientDataQueryable
      */
-    public function orderByDescending($field = null) {
+    public function order_by_descending($field = null) {
         if(is_null($field))
             return $this;
         $this->options->order = "$field desc";
@@ -754,7 +754,7 @@ class ClientDataQueryable
      * @param null|string $field
      * @return ClientDataQueryable
      */
-    public function thenBy($field = null) {
+    public function then_by($field = null) {
         if(is_null($field))
             return $this;
         if (isset($this->options->order))
@@ -768,7 +768,7 @@ class ClientDataQueryable
      * @param null|string $field
      * @return ClientDataQueryable
      */
-    public function thenByDescending($field = null) {
+    public function then_by_descending($field = null) {
         if(is_null($field))
             return $this;
         if (isset($this->options->order))
@@ -792,7 +792,7 @@ class ClientDataQueryable
      * @return ClientDataQueryable
      * @throws Exception
      */
-    public function notEqual($value = null) {
+    public function not_equal($value = null) {
         return $this->compare('ne', $value);
     }
 
@@ -801,7 +801,7 @@ class ClientDataQueryable
      * @return ClientDataQueryable
      * @throws Exception
      */
-    public function greaterThan($value = null) {
+    public function greater_than($value = null) {
         return $this->compare('gt', $value);
     }
 
@@ -810,7 +810,7 @@ class ClientDataQueryable
      * @return ClientDataQueryable
      * @throws Exception
      */
-    public function greaterOrEqual($value = null) {
+    public function greater_or_equal($value = null) {
         return $this->compare('ge', $value);
     }
 
@@ -819,7 +819,7 @@ class ClientDataQueryable
      * @return ClientDataQueryable
      * @throws Exception
      */
-    public function lowerThan($value = null) {
+    public function lower_than($value = null) {
         return $this->compare('lt', $value);
     }
 
@@ -828,7 +828,7 @@ class ClientDataQueryable
      * @return ClientDataQueryable
      * @throws Exception
      */
-    public function lowerOrEqual($value = null) {
+    public function lower_or_equal($value = null) {
         return $this->compare('le', $value);
     }
 
@@ -837,7 +837,7 @@ class ClientDataQueryable
      * @return ClientDataQueryable
      * @throws Exception
      */
-    public function endsWith($value = null) {
+    public function ends_with($value = null) {
         if (is_null($this->left))
             throw new Exception(self::EXCEPTION_INVALID_RIGHT_OP);
         $left = $this->left;
@@ -851,7 +851,7 @@ class ClientDataQueryable
      * @return ClientDataQueryable
      * @throws Exception
      */
-    public function startsWith($value = null) {
+    public function starts_with($value = null) {
         if (is_null($this->left))
             throw new Exception(self::EXCEPTION_INVALID_RIGHT_OP);
         $left = $this->left;
@@ -864,7 +864,7 @@ class ClientDataQueryable
      * @param string $field
      *  @return ClientDataQueryable
      */
-    public function toLower($field = null) {
+    public function to_lower($field = null) {
         $this->left = "tolower($field)";
         return $this;
     }
@@ -873,7 +873,7 @@ class ClientDataQueryable
      * @param string $field
      *  @return ClientDataQueryable
      */
-    public function toUpper($field = null) {
+    public function to_upper($field = null) {
         $this->left = "toupper($field)";
         return $this;
     }
@@ -910,7 +910,7 @@ class ClientDataQueryable
      * @param null $s
      * @return $this
      */
-    public function substringOf($field=null, $s=null) {
+    public function substring_of($field=null, $s=null) {
         if (is_null($field))
             return $this;
         $str = $this->escape($s);
@@ -923,7 +923,7 @@ class ClientDataQueryable
      * @param string $s
      * @return ClientDataQueryable
      */
-    public function indexOf($field, $s) {
+    public function index_of($field, $s) {
         if (is_null($field))
             return $this;
         $str = $this->escape($s);
