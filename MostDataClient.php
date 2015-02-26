@@ -609,10 +609,11 @@ class ClientDataQueryable
     }
 
     /**
-     * @return ClientDataQueryable
+     * @param bool $paged
+     * @return $this
      */
-    public function paged() {
-        $this->options->inlinecount = true;
+    public function paged($paged = true) {
+        $this->options->inlinecount = $paged;
         return $this;
     }
 
