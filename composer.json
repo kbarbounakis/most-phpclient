@@ -3,7 +3,7 @@
   "description": "MOST Web Framework PHP Client Library",
   "minimum-stability": "stable",
   "license": "BSD-3-Clause",
-  "homepage": "https://themost.io/",
+  "homepage": "http://themost.io/",
   "authors": [
     {
       "name": "Kyriakos Barbounakis",
