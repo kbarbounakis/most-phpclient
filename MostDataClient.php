@@ -10,6 +10,7 @@
  * Date: 2015-02-19
  */
 require_once 'HTTP/Request2.php';
+require_once 'HTTP/Request2/Adapter/Curl.php';
 
 /**
  * Represents a common HTTP exception
@@ -54,6 +55,11 @@ class DynamicObject {
  */
 class ClientDataService
 {
+
+    protected $ssl_verify_host = FALSE;
+
+    protected $ssl_verify_peer = FALSE;
+
     public $cookies;
     /**
      * Gets or sets a string  represents a remote URL that is going to be the target application
@@ -116,6 +122,12 @@ class ClientDataService
             foreach(array_keys($this->cookies) as $key) {
                 $request->addCookie($key, $this->cookies[$key]);
             }
+            $request->setConfig(array(
+                'adapter' => new HTTP_Request2_Adapter_Curl(),
+                'ssl_verify_peer'   => $this->ssl_verify_peer,
+                'ssl_verify_host'   => $this->ssl_verify_host,
+                'follow_redirects' => TRUE
+            ));
             try {
                 $response = $request->send();
                 if (200 == $response->getStatus()) {
