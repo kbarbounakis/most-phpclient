@@ -1,5 +1,5 @@
 # most-phpclient
-MOST Web Framework PHP Client Library
+[MOST Web Framework](https://github.com/kbarbounakis/most-web) PHP Client Library
 
 ![MOST Web Framework Logo](https://www.themost.io/assets/images/most_logo_sw_240.png)
 
