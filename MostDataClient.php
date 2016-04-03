@@ -12,6 +12,57 @@
 require_once 'HTTP/Request2.php';
 require_once 'HTTP/Request2/Adapter/Curl.php';
 
+
+class Args {
+
+    /**
+     * @param * $arg
+     * @param string $name
+     * @throws Exception
+     */
+    public static function notNull($arg, $name) {
+        if (is_null($arg)) {
+            throw new Exception($name." may not be null");
+        }
+    }
+
+    /**
+     * @param * $arg
+     * @param string $name
+     * @throws Exception
+     */
+    public static function notString($arg, $name) {
+        if (!is_string($arg)) {
+            throw new Exception($name." must be a string");
+        }
+    }
+
+
+    /**
+     * @param * $arg
+     * @param string $name
+     * @throws Exception
+     */
+    public static function notEmpty($arg, $name) {
+        Args::notNull($arg,$name);
+        Args::notString($arg,$name);
+        if (strlen($arg)==0) {
+            throw new Exception($name." may not be empty");
+        }
+    }
+
+    /**
+     * @param * $arg
+     * @param string $message
+     * @throws Exception
+     */
+    public static function check($arg, $message) {
+        if (!$arg) {
+            throw new Exception($message);
+        }
+    }
+}
+
 /**
  * Represents a common HTTP exception
  * Class HttpClientException
@@ -119,12 +170,9 @@ class ClientDataService
 
     protected $ssl_verify_peer = FALSE;
 
-    public $cookies;
-    /**
-     * Gets or sets a string  represents a remote URL that is going to be the target application
-     * @var null|string
-     */
-    public $url;
+    private $cookies;
+    
+    private $url;
     /**
      * ClientDataService class constructor.
      * @param string $url - A string that represents a remote URL that is going to be the target application.
@@ -134,6 +182,18 @@ class ClientDataService
         $this->url = $url;
         //init cookies
         $this->cookies = array();
+    }
+
+    public  function getBase() {
+        return $this->url;
+    }
+
+    /**
+     * Sets ClientDataService cookies.
+     * @param $cookies
+     */
+    public function setCookie($cookies) {
+        $this->cookies = $cookies;
     }
 
     public function authenticate($username, $password) {
@@ -166,56 +226,12 @@ class ClientDataService
      * @throws Exception
      */
     public function get($relativeUrl) {
-        try {
-            if (is_null($this->url)) {
-                throw new Exception('Target application base URL cannot be empty at this context.');
-            }
-            if (is_null($relativeUrl)) {
-                throw new Exception('URL cannot be empty at this context.');
-            }
-            //build target url
-            $url = $this->url . $relativeUrl;
-            //initialize request
-            $request = new HTTP_Request2($url, HTTP_Request2::METHOD_GET);
-            //append cookies
-            foreach(array_keys($this->cookies) as $key) {
-                $request->addCookie($key, $this->cookies[$key]);
-            }
-            $request->setConfig(array(
-                'adapter' => new HTTP_Request2_Adapter_Curl(),
-                'ssl_verify_peer'   => $this->ssl_verify_peer,
-                'ssl_verify_host'   => $this->ssl_verify_host,
-                'follow_redirects' => TRUE
-            ));
-            try {
-                $response = $request->send();
-                if (200 == $response->getStatus()) {
-                    //validate content type
-                    $contentType = $response->getHeader('content-type');
-                    if (strpos($contentType,'application/json')==-1)
-                        throw new HttpClientException('Invalid response content type.', 500);
-                    //try to decode json
-                    $res = json_decode($response->getBody());
-                    return $res;
-                } else {
-                    throw new HttpClientException($response->getReasonPhrase(),$response->getStatus());
-                }
-            } catch (HTTP_Request2_Exception $e) {
-                throw new HttpClientException($e->getMessage(),$e->getCode());
-            }
-        }
-        catch(HttpException $e) {
-            throw $e;
-        }
-        catch(Exception $e) {
-            print $e;
-            throw new HttpClientException('Internal Server Error',500);
-        }
+        return $this->execute('GET',$relativeUrl, null);
     }
 
     /**
      * @param string $relativeUrl - A string that represents the relative URL of the target application.
-     * @param array|* $data
+     * @param array|stdClass|* $data
      * @return array|stdClass|*
      * @throws Exception
      */
@@ -250,7 +266,7 @@ class ClientDataService
      * @return array|stdClass|*
      * @throws Exception
      */
-    private function execute($method, $relativeUrl, $data) {
+    public function execute($method, $relativeUrl, $data) {
         try {
             if (is_null($this->url)) {
                 throw new Exception('Target application base URL cannot be empty at this context.');
@@ -268,7 +284,8 @@ class ClientDataService
             }
             try {
                 $request->setHeader('Content-Type','application/json');
-                $request->setBody(json_encode($data));
+                if (!is_null($data))
+                    $request->setBody(json_encode($data));
                 $response = $request->send();
                 if (200 == $response->getStatus()) {
                     //validate content type
@@ -317,22 +334,6 @@ class ClientDataContext {
         $this->service = new ClientDataService($this->url);
     }
 
-    /**
-     * @return array
-     */
-    public function getCookies() {
-        return $this->service->cookies;
-    }
-
-    /**
-     * @param $array
-     * @throws Exception
-     */
-    public function setCookies($array) {
-        if (!is_array($array))
-            throw new Exception('Expected array.');
-        $this->service->cookies = $array;
-    }
 
     /**
      * @param string $username
@@ -348,68 +349,247 @@ class ClientDataContext {
     }
 
     /**
-     * Gets a ClientDataQueryable instance of the specified model
+     * Gets an instance of ClientDataModel class based on the specified model name
      * @param string $name
      * @throws Exception
-     * @return ClientDataQueryable
+     * @return ClientDataModel
      */
     function model($name) {
-        if (is_null($name))
-            throw new Exception('Model cannot be empty at this context');
-        $res = new ClientDataQueryable($name);
-        if (is_null($this->service))
-            $this->service = new ClientDataService($this->url);
-        //set service
-        $res->service = $this->service;
-        return $res;
+        Args::notNull($name, "Model name");
+        return new ClientDataModel($name,$this->service);
     }
+}
+
+class ClientDataModel {
+
+    private $name_;
+    private $url_;
+    private $service_;
+    /**
+     * ClientDataModel class constructor.
+     * @param string $name - A string which represents the name of this model.
+     * @param ClientDataService $service - An instance of ClientDataService that is going to be used in data requests.
+     */
+    public function __construct($name, $service) {
+        Args::notNull($name, "Model name");
+        $this->name_ = $name;
+        $this->url_ = "/$name/index.json";
+        $this->service_ = $service;
+    }
+
+    /**
+     * Gets the name of this data model
+     * @return string
+     */
+    public function getName() {
+        return $this->name_;
+    }
+
+    /**
+     * Gets the URL which is associated with this data model
+     * @return string
+     */
+    public function getUrl() {
+        return $this->url_;
+    }
+
+    /**
+     * Sets the URL for this data model
+     * @param string $url
+     * @return string
+     */
+    public function setUrl($url) {
+        Args::notNull($url,"Model URL");
+        Args::check(preg_match("/^https?:\\/\\//i",$url),"Request URL may not be an absolute URI");
+        if (preg_match("/^\\//i", $url))
+            $this->url_ = $url;
+        else
+        {
+            $this->url_ = "/".$this->getName()."/".$url;
+        }
+    }
+
+    /**
+     * Gets the instance of ClientDataService which is associated with this data model.
+     * @return ClientDataService
+     */
+    public function getService() {
+        return $this->service_;
+    }
+
+    /**
+     * Gets the schema of this data model
+     * @return stdClass
+     * @throws HttpClientException
+     * @throws HttpException
+     */
+    public function getSchema() {
+        $model = $this->getName();
+        return $this->getService()->execute("GET", "/$model/schema.json", null);
+    }
+
+    /**
+     * @param string $field
+     * @return ClientDataQueryable
+     */
+    public function where($field) {
+        Args::notNull($field,"Field");
+        $res = new ClientDataQueryable($this->getName());
+        $res->setService($this->getService());
+        return $res->where($field);
+    }
+
+    /**
+     * @param ...string $field
+     * @return ClientDataQueryable
+     */
+    public function select($field) {
+        Args::notNull($field,"Field");
+        $res = new ClientDataQueryable($this->getName());
+        $res->setService($this->getService());
+        return call_user_func_array(array($res, "select"), func_get_args());
+    }
+
+    /**
+     * @param ...string $field
+     * @return ClientDataQueryable
+     */
+    public function expand($field) {
+        Args::notNull($field,"Field");
+        $res = new ClientDataQueryable($this->getName());
+        $res->setService($this->getService());
+        return call_user_func_array(array($res, "expand"), func_get_args());
+    }
+
+    /**
+     * @param ...string $field
+     * @return ClientDataQueryable
+     */
+    public function orderBy($field) {
+        Args::notNull($field,"Field");
+        $res = new ClientDataQueryable($this->getName());
+        $res->setService($this->getService());
+        return call_user_func_array(array($res, "orderBy"), func_get_args());
+    }
+
+    /**
+     * @param ...string $field
+     * @return ClientDataQueryable
+     */
+    public function orderByDescending($field) {
+        Args::notNull($field,"Field");
+        $res = new ClientDataQueryable($this->getName());
+        $res->setService($this->getService());
+        return call_user_func_array(array($res, "orderByDescending"), func_get_args());
+    }
+
+    /**
+     * @param int $num
+     * @return ClientDataQueryable
+     */
+    public function skip($num) {
+        Args::notNull($num,"Skip argument");
+        $res = new ClientDataQueryable($this->getName());
+        $res->setService($this->getService());
+        return $res->skip($num);
+    }
+
+    /**
+     * @param int $num
+     * @return ClientDataQueryable
+     */
+    public function take($num) {
+        Args::notNull($num,"Skip argument");
+        $res = new ClientDataQueryable($this->getName());
+        $res->setService($this->getService());
+        return $res->take($num);
+    }
+
+    /**
+     * @return stdClass[]
+     */
+    public function getItems() {
+        $res = new ClientDataQueryable($this->getName());
+        $res->setService($this->getService());
+        return $res->getItems();
+    }
+
+    /**
+     * @param * $data
+     * @return array|stdClass|DynamicObject
+     * @throws Exception
+     * @throws HttpClientException
+     * @throws HttpException
+     */
+    public function save($data) {
+        Args::notNull($this->getService(),"Client service");
+        return $this->getService()->execute("POST", $this->getUrl(), $data);
+    }
+
+    /**
+     * @param * $data
+     * @return array|stdClass|DynamicObject
+     * @throws Exception
+     * @throws HttpClientException
+     * @throws HttpException
+     */
+    public function remove($data) {
+        Args::notNull($this->getService(),"Client service");
+        return $this->getService()->execute("DELETE", $this->getUrl(), $data);
+    }
+
 }
 
 class DataQueryableOptions
 {
     /**
      * Gets or set a string that contains an open data formatted filter statement, if any.
-     * @var
+     * @var string
      */
     public $filter;
     /**
      * Gets or sets a comma delimited string that contains the fields to be retrieved.
-     * @var
+     * @var string
      */
     public $select;
     /**
      * Gets or sets a comma delimited string that contains the fields to be used for ordering the result set.
-     * @var
+     * @var string
      */
     public $order;
     /**
      * Gets or sets a number that indicates the number of records to retrieve.
-     * @var
+     * @var int
      */
     public $top;
     /**
      * Gets or sets a number that indicates the number of records to be skipped.
-     * @var
+     * @var int
      */
     public $skip;
     /**
      * Gets or sets a comma delimited string that contains the fields to be used for grouping the result set.
-     * @var
+     * @var string
      */
     public $group;
     /**
      * Gets or sets a comma delimited string that contains the models to be expanded.
-     * @var
+     * @var string
      */
     public $expand;
     /**
      * Gets or sets a boolean that indicates whether paging parameters will be included in the result set.
-     * @var *
+     * @var boolean
      */
     public $inlinecount;
     /**
+     * Gets or sets a boolean which indicates whether the result will contain only the first item of the result set.
+     * @var boolean
+     */
+    public $first;
+    /**
      *  Gets or set a string that contains an open data formatted filter statement that is going to be joined with the underlying filter statement, if any.
-     * @var *
+     * @var string
      */
     public $prepared;
 }
@@ -517,103 +697,110 @@ class ClientDataQueryable
         $this->options->inlinecount=true;
     }
 
+    /**
+     * Gets the name of the associated data model.
+     * @return ClientDataService
+     */
+    public function getModel() {
+        return $this->model;
+    }
+
+    /**
+     * Gets the instance of ClientDataService which is associated with this data queryable.
+     * @return ClientDataService
+     */
+    public function getService() {
+        return $this->service;
+    }
+
+    /**
+     * Sets the instance of ClientDataService which is associated with this data queryable.
+     * @param ClientDataService $service
+     * @return ClientDataQueryable
+     */
+    public function setService($service) {
+        $this->service = $service;
+        return $this;
+    }
+
     const EXCEPTION_INVALID_RIGHT_OP = 'Invalid right operand assignment. Left operand cannot be empty at this context.';
     const EXCEPTION_NOT_NULL = 'Value cannot be null at this context.';
 
     /**
      * @param int $num
-     * @return array|stdClass
+     * @return ClientDataQueryable
      * @throws Exception
      * @throws HttpException
      */
-    public function take($num=0) {
-        if (is_int($num))
-            if ($num>=0)
-                $this->top($num);
-        if (!is_null($this->options->top))
-            if ($this->options->top<=0)
-                $this->options->inlinecount=false;
-        //get data
-        $model = $this->model;
-        return $this->service->get($this->get_url.$this->build_options_query());
-    }
-
-    /**
-     * @param * $key
-     * @return ClientDataQueryable
-     */
-    public function item($key) {
-        $this->key = $key;
+    public function take($num) {
+        $this->options->top = $num;
+        $this->options->first = false;
+        $this->options->inlinecount=false;
         return $this;
     }
 
     /**
-     * @param string $association
-     * @return ClientDataQueryable
-     * @throws Exception
-     */
-    public function query($association) {
-        if (is_null($this->key))
-            throw new Exception('Associated item cannot be empty at this context.');
-        $q = new ClientDataQueryable($association);
-        //clone service
-        $q->service = $this->service;
-        //get variables
-        $key = $this->key; $model = $this->model;
-        //set get url
-        $q->get_url = "/$model/$key/$association/index.json";
-        //set post url
-        $q->post_url = "/$model/$key/$association/edit.json";
-        return $q;
-    }
-
-    /**
-     * @return array|stdClass
+     * @return stdClass
      * @throws Exception
      * @throws HttpException
      */
     public function first() {
-        $this->skip(0)->top(1);
-        //get data
-        $model = $this->model;
-        return $this->service->get($this->get_url.$this->build_options_query())[0];
+        $this->options->skip = 0;
+        $this->options->top = 0;
+        $this->options->inlinecount = false;
+        $this->options->first = true;
+        return $this->service->execute("GET", $this->get_url.$this->build_options_query(), null);
     }
 
     /**
-     * @param array|* $data
-     * @return array|stdClass|DynamicObject
+     * @return stdClass
      * @throws Exception
-     * @throws HttpClientException
      * @throws HttpException
      */
-    public function update($data) {
-        $model = $this->model;
-        return $this->service->post($this->post_url, $data);
+    public function getItem() {
+        return $this->first();
     }
 
     /**
-     * @param array|* $data
-     * @return array|stdClass|DynamicObject
+     * @return stdClass
+     * @deprecated Use ClientDataQueryable.getItem() instead
      * @throws Exception
-     * @throws HttpClientException
      * @throws HttpException
      */
-    public function insert($data) {
-        $model = $this->model;
-        return $this->service->put($this->post_url, $data);
+    public function item() {
+        return $this->getItem();
     }
 
     /**
-     * @param array|* $data
-     * @return array|stdClass|DynamicObject
+     * @return stdClass[]
      * @throws Exception
-     * @throws HttpClientException
      * @throws HttpException
      */
-    public function remove($data) {
-        $model = $this->model;
-        return $this->service->remove($this->post_url, $data);
+    public function getItems() {
+        $this->options->inlinecount = false;
+        return $this->service->execute("GET", $this->get_url.$this->build_options_query(), null);
     }
+
+    /**
+     * @throws Exception
+     * @throws HttpException
+     */
+    public function getList() {
+        $this->options->first = false;
+        $this->options->inlinecount = true;
+        return $this->service->execute("GET", $this->get_url.$this->build_options_query(), null);
+    }
+
+    /**
+     * @return stdClass[]
+     * @deprecated Use ClientDataQueryable.getItems() instead
+     * @throws Exception
+     * @throws HttpException
+     */
+    public function items() {
+        return $this->getItems();
+    }
+
 
     private function join_filters($filter1=null, $filter2=null)
     {
@@ -680,15 +867,6 @@ class ClientDataQueryable
     }
 
     /**
-     * @param bool $paged
-     * @return $this
-     */
-    public function paged($paged = true) {
-        $this->options->inlinecount = $paged;
-        return $this;
-    }
-
-    /**
      * @return ClientDataQueryable
      */
     public function prepare() {
@@ -702,10 +880,37 @@ class ClientDataQueryable
     }
 
     /**
+     * Prepares a logical OR query expression.
+     * Note: The common ClientDataQueryable.or() method cannot be used because and is a reserved word for PHP.
+     * @param string $field
+     *  @return ClientDataQueryable
+     */
+    public function either($field = null) {
+        Args::notNull($field,"Field");
+        $this->lop = 'or';
+        $this->left = $field;
+        $this->lop = 'or';
+        return $this;
+    }
+
+    /**
+     * Prepares a logical AND query expression.
+     * Note: The common ClientDataQueryable.and() method cannot be used because and is a reserved word for PHP.
+     * @param string $field
+     *  @return ClientDataQueryable
+     */
+    public function also($field) {
+        Args::notNull($field,"Field");
+        $this->lop = 'and';
+        $this->left = $field;
+        return $this;
+    }
+
+    /**
      * @param string $field
      * @return ClientDataQueryable
      */
-    public function and_also($field) {
+    public function andAlso($field) {
         if (is_null($field))
             return $this;
         $this->prepare();
@@ -718,7 +923,7 @@ class ClientDataQueryable
      * @param string $field
      * @return ClientDataQueryable
      */
-    public function or_else($field) {
+    public function orElse($field) {
         if (is_null($field))
             return $this;
         $this->prepare();
@@ -728,128 +933,79 @@ class ClientDataQueryable
     }
 
     /**
-     * @param null|string $field
+     * @param string $field
      *  @return ClientDataQueryable
      */
-    public function where($field = null) {
-        if (is_null($field))
-            return $this;
+    public function where($field) {
+        Args::notNull($field,"Field");
         //set in-process field
         $this->left = $field;
         return $this;
     }
 
     /**
-     * @param null|string $field
-     *  @return ClientDataQueryable
+     * @param ...string $field
+     * @return ClientDataQueryable
+     * @throws Exception
      */
-    public function also($field = null) {
-        $this->lop = 'and';
-        if (is_null($field))
-            return $this;
-        $this->left = $field;
+    public function select($field) {
+        $arg_list = func_get_args();
+        if (count($arg_list)>0) {
+            $this->options->select = implode(',', $arg_list);
+        }
+        else {
+            throw new Exception('Invalid argument. Expected string.');
+        }
+        return $this;
+    }
+
+    /**
+     * @param ...string $field
+     * @return ClientDataQueryable
+     * @throws Exception
+     */
+    public function groupBy($field) {
+        $arg_list = func_get_args();
+        if (count($arg_list)>0) {
+            $this->options->group = implode(',', $arg_list);
+        }
+        else {
+            throw new Exception('Invalid argument. Expected string.');
+        }
+        return $this;
+    }
+
+    /**
+     * @param ...string $field
+     * @return ClientDataQueryable
+     * @throws Exception
+     */
+    public function expand($field) {
+        $arg_list = func_get_args();
+        if (count($arg_list)>0) {
+            $this->options->expand = implode(',', $arg_list);
+        }
+        else {
+            throw new Exception('Invalid argument. Expected string.');
+        }
         return $this;
     }
 
     /**
      * @param string $field
-     *  @return ClientDataQueryable
-     */
-    public function either($field = null) {
-        $this->lop = 'or';
-        if (is_null($field))
-            return $this;
-        $this->left = $field;
-        $this->lop = 'or';
-        return $this;
-    }
-
-    /**
-     * @param null|string|array $field
-     * @return ClientDataQueryable
-     * @throws Exception
-     */
-    public function select($field = null) {
-        if(is_null($field))
-            return $this;
-        if (is_string($field)) {
-            $this->options->select = $field;
-        }
-        else if(is_array($field)) {
-            if (count($field)>0) {
-                $this->options->select = implode(',', $field);
-            }
-            else {
-                $this->options->select = null;
-            }
-        }
-        else
-            throw new Exception('Invalid argument. Expected string or array.');
-        return $this;
-    }
-
-    /**
-     * @param null|string|array $field
-     * @return ClientDataQueryable
-     * @throws Exception
-     */
-    public function group_by($field = null) {
-        if(is_null($field))
-            return $this;
-        if (is_string($field)) {
-            $this->options->group = $field;
-        }
-        else if(is_array($field)) {
-            if (count($field)>0) {
-                $this->options->group = implode(',', $field);
-            }
-            else {
-                $this->options->group = null;
-            }
-        }
-        else
-            throw new Exception('Invalid argument. Expected string or array.');
-        return $this;
-    }
-
-    /**
-     * @param string|array $field
-     * @return $this
-     * @throws Exception
-     */
-    public function expand($field) {
-        if(is_null($field))
-            return $this;
-        if (is_string($field)) {
-            $this->options->expand = $field;
-        }
-        else if(is_array($field)) {
-            if (count($field)>0) {
-                $this->options->expand = implode(',', $field);
-            }
-        }
-        else
-            throw new Exception('Invalid argument. Expected string or array.');
-        return $this;
-    }
-
-    /**
-     * @param null|string $field
      * @return ClientDataQueryable
      */
-    public function order_by($field = null) {
-        if(is_null($field))
-            return $this;
+    public function orderBy($field) {
+        Args::notNull($field,"Order expression");
         $this->options->order = $field;
         return $this;
     }
     /**
-     * @param null|string $field
+     * @param string $field
      * @return ClientDataQueryable
      */
-    public function order_by_descending($field = null) {
-        if(is_null($field))
-            return $this;
+    public function orderByDescending($field) {
+        Args::notNull($field,"Order expression");
         $this->options->order = "$field desc";
         return $this;
     }
@@ -858,9 +1014,8 @@ class ClientDataQueryable
      * @param null|string $field
      * @return ClientDataQueryable
      */
-    public function then_by($field = null) {
-        if(is_null($field))
-            return $this;
+    public function thenBy($field) {
+        Args::notNull($field,"Order expression");
         if (isset($this->options->order))
             $this->options->order .= ",$field";
         else
@@ -872,9 +1027,8 @@ class ClientDataQueryable
      * @param null|string $field
      * @return ClientDataQueryable
      */
-    public function then_by_descending($field = null) {
-        if(is_null($field))
-            return $this;
+    public function thenByDescending($field = null) {
+        Args::notNull($field,"Order expression");
         if (isset($this->options->order))
             $this->options->order .= ",$field desc";
         else
@@ -892,11 +1046,37 @@ class ClientDataQueryable
     }
 
     /**
+     * @param * $value1
+     * @param * $value2
+     * @return ClientDataQueryable
+     * @throws Exception
+     */
+    public function between($value1, $value2) {
+        Args::notNull($this->left,"Left operand");
+        $s = (new ClientDataQueryable ($this->getModel ()))
+            ->where ($this->left)->greaterOrEqual ($value1)
+            ->also ($this->left)->lowerOrEqual ($value2)->options->filter;
+        $lop = $this->lop;
+        if (is_null($lop)) {
+            $lop = "and";
+        }
+        $filter = $this->options->filter;
+        if (is_string($filter)) {
+            $this->options->filter = "($filter) $lop ($s)";
+        }
+        else {
+            $this->options->filter =  "($s)";
+        }
+        $this->left = null; $this->op = null; $this->right = null; $this->lop = null;
+        return $this;
+    }
+
+    /**
      * @param * $value
      * @return ClientDataQueryable
      * @throws Exception
      */
-    public function not_equal($value = null) {
+    public function notEqual($value = null) {
         return $this->compare('ne', $value);
     }
 
@@ -905,7 +1085,7 @@ class ClientDataQueryable
      * @return ClientDataQueryable
      * @throws Exception
      */
-    public function greater_than($value = null) {
+    public function greaterThan($value = null) {
         return $this->compare('gt', $value);
     }
 
@@ -914,7 +1094,7 @@ class ClientDataQueryable
      * @return ClientDataQueryable
      * @throws Exception
      */
-    public function greater_or_equal($value = null) {
+    public function greaterOrEqual($value = null) {
         return $this->compare('ge', $value);
     }
 
@@ -923,7 +1103,7 @@ class ClientDataQueryable
      * @return ClientDataQueryable
      * @throws Exception
      */
-    public function lower_than($value = null) {
+    public function lowerThan($value = null) {
         return $this->compare('lt', $value);
     }
 
@@ -932,7 +1112,7 @@ class ClientDataQueryable
      * @return ClientDataQueryable
      * @throws Exception
      */
-    public function lower_or_equal($value = null) {
+    public function lowerOrEqual($value = null) {
         return $this->compare('le', $value);
     }
 
@@ -941,13 +1121,13 @@ class ClientDataQueryable
      * @return ClientDataQueryable
      * @throws Exception
      */
-    public function ends_with($value = null) {
+    public function endsWith($value = null) {
         if (is_null($this->left))
             throw new Exception(self::EXCEPTION_INVALID_RIGHT_OP);
         $left = $this->left;
         $escapedValue = $this->escape($value);
         $this->left = "endswith($left,$escapedValue)";
-        return $this->compare('eq', true);
+        return $this;
     }
 
     /**
@@ -955,82 +1135,116 @@ class ClientDataQueryable
      * @return ClientDataQueryable
      * @throws Exception
      */
-    public function starts_with($value = null) {
+    public function startsWith($value = null) {
         if (is_null($this->left))
             throw new Exception(self::EXCEPTION_INVALID_RIGHT_OP);
         $left = $this->left;
         $escapedValue = $this->escape($value);
         $this->left = "startswith($left,$escapedValue)";
-        return $this->compare('eq', true);
+        return $this;
     }
 
     /**
-     * @param string $field
-     *  @return ClientDataQueryable
+     * @return ClientDataQueryable
+     * @throws Exception
      */
-    public function to_lower($field = null) {
+    public function toLowerCase() {
+        Args::notNull($this->left,"Left operand");
+        $field = $this->left;
         $this->left = "tolower($field)";
         return $this;
     }
 
     /**
-     * @param string $field
-     *  @return ClientDataQueryable
+     * @return ClientDataQueryable
+     * @throws Exception
      */
-    public function to_upper($field = null) {
+    public function toUpperCase() {
+        Args::notNull($this->left,"Left operand");
+        $field = $this->left;
         $this->left = "toupper($field)";
         return $this;
     }
 
     /**
-     * @param string $field
-     *  @return ClientDataQueryable
+     * @return ClientDataQueryable
+     * @throws Exception
      */
-    public function trim($field = null) {
-        $this->left = "trim($field)";
+    public function trim() {
+        Args::notNull($this->left,"Left operand");
+        $field = $this->left;
+        $this->left = "toupper($field)";
         return $this;
     }
 
     /**
-     * @param null|string $field
+     * @return ClientDataQueryable
+     * @throws Exception
+     */
+    public function round() {
+        Args::notNull($this->left,"Left operand");
+        $field = $this->left;
+        $this->left = "round($field)";
+        return $this;
+    }
+
+    /**
+     * @return ClientDataQueryable
+     * @throws Exception
+     */
+    public function floor() {
+        Args::notNull($this->left,"Left operand");
+        $field = $this->left;
+        $this->left = "floor($field)";
+        return $this;
+    }
+
+    /**
+     * @return ClientDataQueryable
+     * @throws Exception
+     */
+    public function ceil() {
+        Args::notNull($this->left,"Left operand");
+        $field = $this->left;
+        $this->left = "ceiling($field)";
+        return $this;
+    }
+
+    /**
      * @param int $pos
      * @param int $length
      * @return $this
      * @throws Exception
      */
-    public function substring($field=null, $pos=0, $length=0) {
-        if (is_null($field))
-            return $this;
+    public function substring($pos=0, $length=0) {
         if ($length<=0)
             throw new Exception('Invalid argument. Length must be greater than zero.');
         if ($pos<0)
             throw new Exception('Invalid argument. Position must be greater or equal to zero.');
+        $field = $this->left;
         $this->left = "substring($field,$pos,$length)";
         return $this;
     }
 
     /**
-     * @param null|string $field
-     * @param null $s
+     * @param int $pos
+     * @param int $length
      * @return $this
+     * @throws Exception
      */
-    public function substring_of($field=null, $s=null) {
-        if (is_null($field))
-            return $this;
-        $str = $this->escape($s);
-        $this->left = "substringof($field,$str)";
-        return $this;
+    public function substr($pos=0, $length=0) {
+        return $this->substring($pos,$length);
     }
 
     /**
-     * @param string $field
      * @param string $s
      * @return ClientDataQueryable
      */
-    public function index_of($field, $s) {
-        if (is_null($field))
-            return $this;
+    public function indexOf($s) {
+        Args::notNull($this->left,"Left operand");
+        Args::notNull($s,"Value");
         $str = $this->escape($s);
+        $field = $this->left;
         $this->left = "indexof($field,$str)";
         return $this;
     }
@@ -1041,79 +1255,109 @@ class ClientDataQueryable
      * @throws Exception
      */
     public function contains($value) {
-        if (is_null($value))
-            throw new InvalidArgumentException(self::EXCEPTION_NOT_NULL);
+        Args::notNull($value,"Value");
         //escape value
         $str = $this->escape($value);
         //get left operand
         $left = $this->left;
         //format left operand
-        $this->left = "indexof($left,$str)";
+        $this->left = "contains($left,$str)";
         //and finally append comparison
         return $this->compare('ge', 0);
     }
 
     /**
-     * @param null|string $field
-     *  @return ClientDataQueryable
+     * @return ClientDataQueryable
+     * @throws Exception
      */
-    public function length($field = null) {
-        if (is_null($field))
-            return $this;
+    public function length() {
+        Args::notNull($this->left,"Left operand");
+        $field = $this->left;
         $this->left = "length($field)";
         return $this;
     }
 
     /**
-     * @param string $field
-     *  @return ClientDataQueryable
+     * @return ClientDataQueryable
+     * @throws Exception
      */
-    public function year($field = null) {
+    public function getDate() {
+        Args::notNull($this->left,"Left operand");
+        $field = $this->left;
+        $this->left = "date($field)";
+        return $this;
+    }
+    
+    /**
+     * @return ClientDataQueryable
+     * @throws Exception
+     */
+    public function getYear() {
+        Args::notNull($this->left,"Left operand");
+        $field = $this->left;
         $this->left = "year($field)";
         return $this;
     }
 
     /**
-     * @param string $field
-     *  @return ClientDataQueryable
+     * @return ClientDataQueryable
+     * @throws Exception
      */
-    public function month($field = null) {
+    public function getFullYear() {
+        return $this->getYear();
+    }
+
+    /**
+     * @return ClientDataQueryable
+     * @throws Exception
+     */
+    public function getMonth() {
+        Args::notNull($this->left,"Left operand");
+        $field = $this->left;
         $this->left = "month($field)";
         return $this;
     }
 
     /**
-     * @param string $field
-     *  @return ClientDataQueryable
+     * @return ClientDataQueryable
+     * @throws Exception
      */
-    public function day($field = null) {
+    public function getDay() {
+        Args::notNull($this->left,"Left operand");
+        $field = $this->left;
         $this->left = "day($field)";
         return $this;
     }
 
     /**
-     * @param string $field
-     *  @return ClientDataQueryable
+     * @return ClientDataQueryable
+     * @throws Exception
      */
-    public function hour($field = null) {
+    public function getHours() {
+        Args::notNull($this->left,"Left operand");
+        $field = $this->left;
         $this->left = "hour($field)";
         return $this;
     }
 
     /**
-     * @param string $field
-     *  @return ClientDataQueryable
+     * @return ClientDataQueryable
+     * @throws Exception
      */
-    public function minute($field = null) {
+    public function getMinutes() {
+        Args::notNull($this->left,"Left operand");
+        $field = $this->left;
         $this->left = "minute($field)";
         return $this;
     }
 
     /**
-     * @param string $field
-     *  @return ClientDataQueryable
+     * @return ClientDataQueryable
+     * @throws Exception
      */
-    public function second($field = null) {
+    public function getSeconds() {
+        Args::notNull($this->left,"Left operand");
+        $field = $this->left;
         $this->left = "second($field)";
         return $this;
     }
