@@ -357,7 +357,15 @@ class ClientDataContext {
     function model($name) {
         Args::notNull($name, "Model name");
         return new ClientDataModel($name,$this->service);
-    }
+	}
+
+	/**
+	* Gets the instance of ClientDataService which is associated with this data context.
+	* @return ClientDataService
+	*/
+	public function getService() {
+		return $this->service;
+	}
 }
 
 class ClientDataModel {
