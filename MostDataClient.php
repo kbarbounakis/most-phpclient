@@ -1387,7 +1387,12 @@ class ClientDataQueryable
 
     protected function append() {
         try {
-            $expr = $this->left . ' ' . $this->op . ' ' . $this->escape($this->right);
+            if(is_null($this->right)){
+                $expr = $this->left . ' ' . $this->op . ' null';
+            }
+            else{
+                $expr = $this->left . ' ' . $this->op . ' ' . $this->escape($this->right);
+            }
             if (is_null($this->lop)) {
                 $this->lop = 'and';
             }
