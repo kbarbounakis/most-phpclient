@@ -171,21 +171,39 @@ class ClientDataService
     protected $ssl_verify_peer = FALSE;
 
     private $cookies;
+
+    private $headers;
+
+    public $options;
     
     private $url;
     /**
      * ClientDataService class constructor.
      * @param string $url - A string that represents a remote URL that is going to be the target application.
      */
-    public function __construct($url = null) {
+    public function __construct($url = null, $options = array('useMediaTypeExtensions' => false, 'useResponseConversion' => true)) {
         //set model
         $this->url = $url;
         //init cookies
         $this->cookies = array();
+        // headers
+        $this->headers = array();
+        // set service options
+        $this->options = $options;
     }
 
     public  function getBase() {
         return $this->url;
+    }
+
+    /**
+     * Append a header to service default headers e.g. Authorization Bearer anAuthServerBearerToken, or Accept-Language en etc.
+     * @param {string} $name
+     * @param {string} $value
+     * @throws Exception
+     */
+    public function setHeader($name, $value) {
+        $this->headers[$name] = $value;
     }
 
     /**
@@ -284,6 +302,10 @@ class ClientDataService
             }
             try {
                 $request->setHeader('Content-Type','application/json');
+                // append headers
+                foreach(array_keys($this->headers) as $key) {
+                    $request->setHeader($key, $this->headers[$key]);
+                }
                 if (!is_null($data))
                     $request->setBody(json_encode($data));
                 $response = $request->send();
@@ -293,7 +315,16 @@ class ClientDataService
                     if (strpos($contentType,'application/json')!=-1) {
                         //try to decode json
                         $res = json_decode($response->getBody());
-                        return $res;
+                        if ($this->options['useResponseConversion'] == true) {
+                            if (property_exists($res, 'value') == false) {
+                                return $res;
+                            }
+                            return $res->value;
+                        }
+                        else {
+                            return $res;
+                        }
+                        
                     }
                     else {
                         return new DynamicObject();
@@ -317,21 +348,26 @@ class ClientDataService
 
 }
 
-
 class ClientDataContext {
 
     private $url;
-
+    public $options;
+    /**
+     * @type ClientDataService
+     */
     private $service;
 
     /**
      * ClientDataService class constructor.
      * @param string $url - A string that represents a remote URL that is going to be the target application.
      */
-    public function __construct($url) {
+    public function __construct($url, $options = array('useMediaTypeExtensions' => false, 'useResponseConversion' => true)) {
         //set model
         $this->url = $url;
-        $this->service = new ClientDataService($this->url);
+        // get options
+        $this->options = $options;
+        // initialize service
+        $this->service = new ClientDataService($this->url, $this->options);
     }
 
 
@@ -345,6 +381,11 @@ class ClientDataContext {
         if (is_null($this->service))
             $this->service = new ClientDataService($this->url);
         $this->service->authenticate($username, $password);
+        return $this;
+    }
+
+    public function setBearerAuthorization($token) {
+        $this->service->setHeader('Authorization', 'Bearer ' . $token);
         return $this;
     }
 
@@ -381,7 +422,13 @@ class ClientDataModel {
     public function __construct($name, $service) {
         Args::notNull($name, "Model name");
         $this->name_ = $name;
-        $this->url_ = "/$name/index.json";
+        if ($service->options['useMediaTypeExtensions']) {
+            $this->url_ = "/$name/index.json";
+        }
+        else {
+            $this->url_ = "/$name/";
+        }
+        
         $this->service_ = $service;
     }
 
@@ -728,6 +775,11 @@ class ClientDataQueryable
      */
     public function setService($service) {
         $this->service = $service;
+        if ($this->service->options['useMediaTypeExtensions'] == false) {
+            // reset url
+            $this->get_url = "/$this->model/";
+            $this->post_url = "/$this->model/";
+        }
         return $this;
     }
 
@@ -754,9 +806,8 @@ class ClientDataQueryable
      */
     public function first() {
         $this->options->skip = 0;
-        $this->options->top = 0;
+        $this->options->top = 1;
         $this->options->inlinecount = false;
-        $this->options->first = true;
         return $this->service->execute("GET", $this->get_url.$this->build_options_query(), null);
     }
 
@@ -766,7 +817,11 @@ class ClientDataQueryable
      * @throws HttpException
      */
     public function getItem() {
-        return $this->first();
+        $res = $this->first();
+        if (count($res) == 0) {
+            return null;
+        }
+        return $res[0];
     }
 
     /**
